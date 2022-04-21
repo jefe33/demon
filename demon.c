@@ -1,4 +1,4 @@
-#include "synchro.h";
+#include "synchro.h"
 
 int main(){
     
