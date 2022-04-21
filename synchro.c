@@ -6,20 +6,25 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdbool.h>
+#include <fcntl.h>
 #include "synchro.h"
 
 void synchro_pliki(char *source, char *dest); 
 char **create_table(DIR *dir, int *size, char *path);
 char *full_path(char *path, char* name);
+void create_file(char *src, char *dst);
 
-int main(){
-    synchro_pliki(".", "..");
-}
+// int main(){
+//     synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest");
+// }
 
 void synchro_pliki(char *source, char *dest){
     DIR *src_dir, *dest_dir; 
-    int src_size, dest_size, i;
-
+    int src_size, dest_size, i, j;
+    bool found;
+    char *src_name, *dest_name;
+    
     src_size = dest_size = 0; 
     errno = 0;
 
@@ -28,6 +33,30 @@ void synchro_pliki(char *source, char *dest){
 
     char **source_paths = create_table(src_dir, &src_size, source);
     char **destination_paths = create_table(dest_dir, &dest_size, dest);
+
+    bool exists[dest_size];
+
+    for (i = 0; i < dest_size; i++) {
+        exists[i] = false;
+    }
+
+    for (i = 0; i < src_size; i++) {
+        found = false;
+        src_name = strrchr(source_paths[i], '/');
+        src_name++;
+        for (j = 0; j < dest_size; j++) {
+            dest_name = strrchr(destination_paths[j], '/');
+            if (strcmp(src_name, ++dest_name) == 0) {
+                exists[j] = true;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            create_file(source_paths[i], dest);
+        }
+    }
+    
 
     // for (i=0; i<src_size; i++) {
     //     printf("nazwa: %s\n", source_paths[i]);
@@ -43,6 +72,7 @@ void synchro_pliki(char *source, char *dest){
     for (i = 0; i < dest_size; i++) {
         free(destination_paths[i]);
     }
+
     free(source_paths);
     free(destination_paths);
     closedir(src_dir);
@@ -97,7 +127,7 @@ char *full_path(char *path, char *name){
     name_len = strlen(name);
     tmp = (char *) malloc((path_len + name_len + 2) * sizeof(char));
     offset = 0;
-    
+
     for (i = 0; i < path_len; i++){
         tmp[offset++] = path[i];
     }
@@ -111,4 +141,63 @@ char *full_path(char *path, char *name){
     tmp[offset] = '\0';
 
     return tmp;
+}
+
+void create_file(char *src, char *dst){
+    int fd_to, fd_from;
+    char buf[4096];
+    ssize_t nread;
+    struct stat stats;
+    int saved_errno;
+    char *tmp;
+
+    fd_from = open(src, O_RDONLY);
+    if (fd_from == -1){
+        perror("src open");
+        return;      
+    }
+
+    if(stat(src, &stats)){
+        perror ("stat create file");
+    }
+
+    tmp = strrchr(src, '/');
+    tmp++;
+    tmp = full_path(dst, tmp);
+    fd_to = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, stats.st_mode);
+
+    if (fd_to == -1){
+        perror("dest open");
+        close(fd_from);
+        return;
+    }
+
+    while (nread = read(fd_from, buf, sizeof buf), nread > 0)
+    {
+        char *out_ptr = buf;
+        ssize_t nwritten;
+
+        do {
+            nwritten = write(fd_to, out_ptr, nread);
+
+            if (nwritten >= 0)
+            {
+                nread -= nwritten;
+                out_ptr += nwritten;
+            }
+            else if (errno != EINTR)
+            {
+                perror("write");
+            }
+        } while (nread > 0);
+    }
+
+    if (nread == 0)
+    {
+        if (close(fd_to) < 0)
+        {
+            fd_to = -1;
+        }
+        close(fd_from);
+    }
 }
