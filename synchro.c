@@ -3,66 +3,81 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+#include "synchro.h"
 
-void synchro_pliki(char *sauce, char *dest); 
+void synchro_pliki(char *source, char *dest); 
+char **create_table(DIR *dir, int *size, char *path);
 
+// int main(){
+//     synchro_pliki(".", "..");
+// }
 
-int main(){
-    synchro_pliki(".", "twoja stara sra do gara");
+void synchro_pliki(char *source, char *dest){
+    DIR *src_dir, *dest_dir; 
+    int src_size, dest_size;
+
+    src_size = dest_size = 0; 
+    errno = 0;
+
+    src_dir = opendir(source);
+    dest_dir = opendir(dest);
+
+    char **source_paths = create_table(src_dir, &src_size, source);
+    char **destination_paths = create_table(dest_dir, &dest_size, dest);
+
+    for (int i=0; i<src_size; i++) {
+        printf("nazwa: %s\n", source_paths[i]);
+    }
+    printf("\n");
+    for (int i=0; i<dest_size; i++) {
+        printf("nazwa: %s\n", destination_paths[i]);
+    }
+    
+    free(source_paths);
+    free(destination_paths);
+    closedir(src_dir);
+    closedir(dest_dir);
 }
 
-void synchro_pliki(char *sauce, char *dest){
+char **create_table(DIR *dir, int *size, char *path){
     struct dirent *entry;
-    DIR *dir;
-    struct lista *tmp;
+    struct stat stats;
+    int ret;
+    char tmp[0];
 
-    char ** source_paths = malloc(sizeof(char *));
-    int src_amount = 0;
-    int src_upper_bound = 1;
-
-    errno = 0;
-    dir = opendir(sauce);
+    int upper_bound = 1;
+    char **paths = (char **) malloc(sizeof(char *));
 
     while ((entry = readdir(dir)) != NULL) {
-        //printf("nazwa pliku: %s\n", entry->d_name);
-        if (src_amount < src_upper_bound) {
-            source_paths[src_amount++] = entry->d_name;
-        }else {
-            src_upper_bound *= 2;
-            source_paths = realloc(source_paths, src_upper_bound * sizeof(char *));
-            source_paths[src_amount++] = entry->d_name;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+            continue;
         }
-        // if (source_paths_head == NULL){
-        //     source_paths_head = (struct lista *) malloc(sizeof(struct lista));
-        //     source_paths_head->nazwa_pliku = entry->d_name;
-        //     source_paths_head->next = NULL;
-        //     source_paths_end = source_paths_head;
-        // }else {
-        //     tmp = (struct lista *) malloc(sizeof(struct lista));
-        //     tmp->nazwa_pliku = entry->d_name;
-        //     tmp->next = NULL;
-        //     source_paths_end->next = tmp;
-        //     source_paths_end = tmp;
-        // }
+        strcpy(tmp, path);
+        strcat(tmp, "/");
+        strcat(tmp, entry->d_name);
+        ret = stat(tmp, &stats);
+
+        if (ret) {
+            perror ("stat");
+        }else{
+            if ((stats.st_mode & S_IFMT) == S_IFREG) {
+                if (*size < upper_bound) {
+                    paths[(*size)++] = entry->d_name;
+                }else {
+                    upper_bound *= 2;
+                    paths = (char **) realloc(paths, upper_bound * sizeof(char *));
+                    paths[(*size)++] = entry->d_name;
+                }
+            } 
+        }
     }
 
     if (errno && !entry){
         perror("readdir");
     }
 
-    printf("c: %d, max: %d\n", src_amount, src_upper_bound);
-    for (int i=0; i<src_amount; i++) {
-        printf("nazwa: %s\n", source_paths[i]);
-    }
-
-    // tmp = source_paths_head;
-    // while (tmp != NULL) {
-    //     printf("nazwa pliku: %s\n", tmp->nazwa_pliku);
-    //     source_paths_end = tmp;
-    //     tmp = tmp->next;
-    //     free(source_paths_end);
-    // }
-    
-    free(source_paths);
-    closedir(dir);
+    return paths;
 }
