@@ -12,10 +12,10 @@
 #include "synchro.h"
 
 void synchro_pliki(char *source, char *dest); 
-char **create_table(DIR *dir, int *size, char *path);
+struct info *create_table(DIR *dir, int *size, char *path);
 char *full_path(char *path, char* name);
-void copy_file(char *src, char *dst);
-bool compare_timestamps(char *src, char *dst);
+void copy_file(struct info *src, char *dst);
+void free_memory(struct info *src, struct info *dest, int src_len, int dest_len);
 
 struct info{
     char *f_path;
@@ -23,9 +23,9 @@ struct info{
     struct stat stats;
 };
 
-// int main(){
-//     synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest");
-// }
+int main(){
+    synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest");
+}
 
 void synchro_pliki(char *source, char *dest){
     DIR *src_dir, *dest_dir;
@@ -40,11 +40,8 @@ void synchro_pliki(char *source, char *dest){
     src_dir = opendir(source);
     dest_dir = opendir(dest);
 
-    char **source_paths = create_table(src_dir, &src_size, source);
-    char **destination_paths = create_table(dest_dir, &dest_size, dest);
-
-    src_info = (struct info *) malloc(src_size * sizeof(struct info *));
-    dest_info = (struct info *) malloc(dest_size * sizeof(struct info *));
+    src_info = create_table(src_dir, &src_size, source);
+    dest_info = create_table(dest_dir, &dest_size, dest);
 
     bool exists[dest_size];
 
@@ -54,63 +51,45 @@ void synchro_pliki(char *source, char *dest){
 
     for (i = 0; i < src_size; i++) {
         found = false;
-        src_name = strrchr(source_paths[i], '/');
-        src_name++;
         for (j = 0; j < dest_size; j++) {
-            dest_name = strrchr(destination_paths[j], '/');
-            if (strcmp(src_name, ++dest_name) == 0) {
+            if (strcmp(src_info[i].name, dest_info[j].name) == 0) {
                 exists[j] = true;
                 found = true;
-                if (!compare_timestamps(source_paths[i], destination_paths[j])){
-                    copy_file(source_paths[i], dest);
+                if (src_info[i].stats.st_mtime > dest_info[j].stats.st_mtime){
+                    copy_file(&(src_info[i]), dest);
                 }
                 break;
             }
         }
         // jesli pliku z src niema w dest utworz
         if (!found) {
-            copy_file(source_paths[i], dest);
+            copy_file(&(src_info[i]), dest);
         }
     }
 
     //usuwanie plikow z dest jesli niema w src
     for (i = 0; i < dest_size; i++) {
         if(!exists[i]){
-            if(remove(destination_paths[i])){
+            if(remove(dest_info[i].f_path)){
                 perror("remove");
             }
         }
     }
 
-    // for (i=0; i<src_size; i++) {
-    //     printf("nazwa: %s\n", source_paths[i]);
-    // }
-    // printf("\n");
-    // for (i=0; i<dest_size; i++) {
-    //     printf("nazwa: %s\n", destination_paths[i]);
-    // }
-
-    for (i = 0; i < src_size; i++) {
-        free(source_paths[i]);
-    }
-    for (i = 0; i < dest_size; i++) {
-        free(destination_paths[i]);
-    }
-
-    free(source_paths);
-    free(destination_paths);
+    free_memory(src_info, dest_info, src_size, dest_size);
     closedir(src_dir);
     closedir(dest_dir);
 }
 
-char **create_table(DIR *dir, int *size, char *path){
+struct info *create_table(DIR *dir, int *size, char *path){
     struct dirent *entry;
     struct stat stats;
     int ret;
     char *tmp;
+    bool flag = true;
 
+    struct info *infos = (struct info *) malloc(sizeof(struct info));
     int upper_bound = 1;
-    char **paths = (char **) malloc(sizeof(char *));
 
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
@@ -122,14 +101,17 @@ char **create_table(DIR *dir, int *size, char *path){
         if (ret) {
             perror ("stat");
         }else{
-            if ((stats.st_mode & S_IFMT) == S_IFREG) {
-                if (*size < upper_bound) {
-                    paths[(*size)++] = tmp;
-                }else {
+            if (((stats.st_mode & S_IFMT) == S_IFREG) || (flag && (stats.st_mode & S_IFMT) == S_IFDIR)) {
+
+                if (*size >= upper_bound) {
                     upper_bound *= 2;
-                    paths = (char **) realloc(paths, upper_bound * sizeof(char *));
-                    paths[(*size)++] = tmp;
+                    infos = (struct info *) realloc(infos, upper_bound * sizeof(struct info));
                 }
+
+                infos[*size].f_path = tmp;
+                infos[*size].name = entry->d_name;
+                infos[(*size)++].stats = stats;
+
             }else {
                 free(tmp);
             } 
@@ -140,7 +122,7 @@ char **create_table(DIR *dir, int *size, char *path){
         perror("readdir");
     }
 
-    return paths;
+    return infos;
 }
 
 char *full_path(char *path, char *name){
@@ -168,35 +150,24 @@ char *full_path(char *path, char *name){
 }
 
 // tworzy(jesli niema w folderze dst) i kopiuje zawartosc pliku z src oraz ustawia czas modyfikacji na ten z src 
-void copy_file(char *src, char *dst){
+void copy_file(struct info *src, char *dst){
     int fd_to, fd_from;
     char buf[4096];
     ssize_t nread;
-    struct stat stats;
     struct utimbuf new_times;
-    int saved_errno;
     char *tmp;
 
     //otwarcie pliku z src
-    fd_from = open(src, O_RDONLY);
+    fd_from = open(src->f_path, O_RDONLY);
     if (fd_from == -1){
         perror("src open");
         return;      
     }
 
-    //pobranie statystyk pliku z src
-    if(stat(src, &stats)){
-        perror ("stat create file");
-    }
-
-    //ze sciezki do pliku src np. /home/user/plik ustawia wskaznik na nazwe pliku /plik z ukosnikiem
-    tmp = strrchr(src, '/');
-    // przejscie o jeden w prawo zeby pozbyc sie ukosnika z nazwy pliku /plik -> plik
-    tmp++;
     // zwraca pelno sciezke pliku ktory bedzie dodawany do folderu dst
-    tmp = full_path(dst, tmp);
+    tmp = full_path(dst, src->name);
     //utworzenie/wyczyszczenie pliku z dst
-    fd_to = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, stats.st_mode);
+    fd_to = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, src->stats.st_mode);
 
     if (fd_to == -1){
         perror("dest open");
@@ -232,25 +203,27 @@ void copy_file(char *src, char *dst){
             fd_to = -1;
         }
         close(fd_from);
+
         // ustawienie czasu modyfikacji pliku dst na ten z pliku src
-        new_times.actime = stats.st_atime;
-        new_times.modtime = stats.st_mtime;
+        new_times.actime = src->stats.st_atime;
+        new_times.modtime = src->stats.st_mtime;
         if (utime(tmp, &new_times) < 0) {
             perror(tmp);
         }
     }
 }
 
-//jesli pliki maja taki sam czas modyfikacji zwroc true
-bool compare_timestamps(char *src, char *dst){
-    struct stat attr1, attr2;
-    if (stat(src, &attr1) != 0 || stat(dst, &attr2) != 0)
-    {
-        perror("timestamp");
-        return NULL;
+void free_memory(struct info *src, struct info *dest, int src_len, int dest_len){
+    int i;
+
+    for (i = 0; i < src_len; i++){
+        free(src[i].f_path);
     }
-    if(attr1.st_mtime != attr2.st_mtime){
-        return false;
+
+    for (i = 0; i < dest_len; i++){
+        free(dest[i].f_path);
     }
-    return true;
+
+    free(src);
+    free(dest);
 }
