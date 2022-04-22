@@ -8,12 +8,14 @@
 #include <string.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <utime.h>
 #include "synchro.h"
 
 void synchro_pliki(char *source, char *dest); 
 char **create_table(DIR *dir, int *size, char *path);
 char *full_path(char *path, char* name);
-void create_file(char *src, char *dst);
+void copy_file(char *src, char *dst);
+bool compare_timestamps(char *src, char *dst);
 
 // int main(){
 //     synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest");
@@ -49,14 +51,26 @@ void synchro_pliki(char *source, char *dest){
             if (strcmp(src_name, ++dest_name) == 0) {
                 exists[j] = true;
                 found = true;
+                if (!compare_timestamps(source_paths[i], destination_paths[j])){
+                    copy_file(source_paths[i], dest);
+                }
                 break;
             }
         }
+        // jesli pliku z src niema w dest utworz
         if (!found) {
-            create_file(source_paths[i], dest);
+            copy_file(source_paths[i], dest);
         }
     }
-    
+
+    //usuwanie plikow z dest jesli niema w src
+    for (i = 0; i < dest_size; i++) {
+        if(!exists[i]){
+            if(remove(destination_paths[i])){
+                perror("remove");
+            }
+        }
+    }
 
     // for (i=0; i<src_size; i++) {
     //     printf("nazwa: %s\n", source_paths[i]);
@@ -143,27 +157,35 @@ char *full_path(char *path, char *name){
     return tmp;
 }
 
-void create_file(char *src, char *dst){
+// tworzy(jesli niema w folderze dst) i kopiuje zawartosc pliku z src oraz ustawia czas modyfikacji na ten z src 
+void copy_file(char *src, char *dst){
     int fd_to, fd_from;
     char buf[4096];
     ssize_t nread;
     struct stat stats;
+    struct utimbuf new_times;
     int saved_errno;
     char *tmp;
 
+    //otwarcie pliku z src
     fd_from = open(src, O_RDONLY);
     if (fd_from == -1){
         perror("src open");
         return;      
     }
 
+    //pobranie statystyk pliku z src
     if(stat(src, &stats)){
         perror ("stat create file");
     }
 
+    //ze sciezki do pliku src np. /home/user/plik ustawia wskaznik na nazwe pliku /plik z ukosnikiem
     tmp = strrchr(src, '/');
+    // przejscie o jeden w prawo zeby pozbyc sie ukosnika z nazwy pliku /plik -> plik
     tmp++;
+    // zwraca pelno sciezke pliku ktory bedzie dodawany do folderu dst
     tmp = full_path(dst, tmp);
+    //utworzenie/wyczyszczenie pliku z dst
     fd_to = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, stats.st_mode);
 
     if (fd_to == -1){
@@ -171,9 +193,10 @@ void create_file(char *src, char *dst){
         close(fd_from);
         return;
     }
-
+    // odczytanie czesci(rozmiar bufora) pliku src a nastepnie zapisanie tej czesci do pliku dest az odczyta i zapisze caly plik
     while (nread = read(fd_from, buf, sizeof buf), nread > 0)
     {
+        //ustawienie wskaznika na poczatek bufera bo po zapisie wskaznik sie przesuwa
         char *out_ptr = buf;
         ssize_t nwritten;
 
@@ -199,5 +222,25 @@ void create_file(char *src, char *dst){
             fd_to = -1;
         }
         close(fd_from);
+        // ustawienie czasu modyfikacji pliku dst na ten z pliku src
+        new_times.actime = stats.st_atime;
+        new_times.modtime = stats.st_mtime;
+        if (utime(tmp, &new_times) < 0) {
+            perror(tmp);
+        }
     }
+}
+
+//jesli pliki maja taki sam czas modyfikacji zwroc true
+bool compare_timestamps(char *src, char *dst){
+    struct stat attr1, attr2;
+    if (stat(src, &attr1) != 0 || stat(dst, &attr2) != 0)
+    {
+        perror("timestamp");
+        return NULL;
+    }
+    if(attr1.st_mtime != attr2.st_mtime){
+        return false;
+    }
+    return true;
 }
