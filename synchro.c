@@ -17,12 +17,19 @@ char *full_path(char *path, char* name);
 void copy_file(char *src, char *dst);
 bool compare_timestamps(char *src, char *dst);
 
+struct info{
+    char *f_path;
+    char *name;
+    struct stat stats;
+};
+
 // int main(){
 //     synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest");
 // }
 
 void synchro_pliki(char *source, char *dest){
-    DIR *src_dir, *dest_dir; 
+    DIR *src_dir, *dest_dir;
+    struct info *src_info, *dest_info;
     int src_size, dest_size, i, j;
     bool found;
     char *src_name, *dest_name;
@@ -35,6 +42,9 @@ void synchro_pliki(char *source, char *dest){
 
     char **source_paths = create_table(src_dir, &src_size, source);
     char **destination_paths = create_table(dest_dir, &dest_size, dest);
+
+    src_info = (struct info *) malloc(src_size * sizeof(struct info *));
+    dest_info = (struct info *) malloc(dest_size * sizeof(struct info *));
 
     bool exists[dest_size];
 
