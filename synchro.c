@@ -11,11 +11,12 @@
 #include <utime.h>
 #include "synchro.h"
 
-void synchro_pliki(char *source, char *dest); 
-struct info *create_table(DIR *dir, int *size, char *path);
+void synchro_pliki(char *source, char *dest, bool flag); 
+struct info *create_table(DIR *dir, int *size, char *path, bool flag);
 char *full_path(char *path, char* name);
 void copy_file(struct info *src, char *dst);
 void free_memory(struct info *src, struct info *dest, int src_len, int dest_len);
+void destroy(struct info *target);
 
 struct info{
     char *f_path;
@@ -23,25 +24,25 @@ struct info{
     struct stat stats;
 };
 
-int main(){
-    synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest");
-}
+// int main(){
+//     synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest", true);
+// }
 
-void synchro_pliki(char *source, char *dest){
+void synchro_pliki(char *source, char *dest, bool flag){
     DIR *src_dir, *dest_dir;
     struct info *src_info, *dest_info;
     int src_size, dest_size, i, j;
     bool found;
-    char *src_name, *dest_name;
+    char *src_name, *dest_name, *tmp;
     
     src_size = dest_size = 0; 
     errno = 0;
-
+    
     src_dir = opendir(source);
     dest_dir = opendir(dest);
 
-    src_info = create_table(src_dir, &src_size, source);
-    dest_info = create_table(dest_dir, &dest_size, dest);
+    src_info = create_table(src_dir, &src_size, source, flag);
+    dest_info = create_table(dest_dir, &dest_size, dest, flag);
 
     bool exists[dest_size];
 
@@ -55,7 +56,10 @@ void synchro_pliki(char *source, char *dest){
             if (strcmp(src_info[i].name, dest_info[j].name) == 0) {
                 exists[j] = true;
                 found = true;
-                if (src_info[i].stats.st_mtime > dest_info[j].stats.st_mtime){
+                if (flag && ((src_info[i].stats.st_mode & S_IFMT) == S_IFDIR)){
+                    synchro_pliki(src_info[i].f_path, dest_info[j].f_path, flag);
+                }
+                else if (src_info[i].stats.st_mtime > dest_info[j].stats.st_mtime){
                     copy_file(&(src_info[i]), dest);
                 }
                 break;
@@ -63,16 +67,24 @@ void synchro_pliki(char *source, char *dest){
         }
         // jesli pliku z src niema w dest utworz
         if (!found) {
-            copy_file(&(src_info[i]), dest);
+            if ((src_info[i].stats.st_mode & S_IFMT) == S_IFREG){
+                copy_file(&(src_info[i]), dest);
+            }else{
+                tmp = full_path(dest, src_info[i].name);
+                if (mkdir(tmp, src_info[i].stats.st_mode) == -1){
+                    perror("mkdir");
+                }else{
+                    synchro_pliki(src_info[i].f_path, tmp, flag);
+                }
+                free(tmp);
+            }
         }
     }
 
     //usuwanie plikow z dest jesli niema w src
     for (i = 0; i < dest_size; i++) {
         if(!exists[i]){
-            if(remove(dest_info[i].f_path)){
-                perror("remove");
-            }
+            destroy(&dest_info[i]);
         }
     }
 
@@ -81,15 +93,15 @@ void synchro_pliki(char *source, char *dest){
     closedir(dest_dir);
 }
 
-struct info *create_table(DIR *dir, int *size, char *path){
+struct info *create_table(DIR *dir, int *size, char *path, bool flag){
     struct dirent *entry;
     struct stat stats;
     int ret;
     char *tmp;
-    bool flag = true;
 
     struct info *infos = (struct info *) malloc(sizeof(struct info));
     int upper_bound = 1;
+    errno = 0;
 
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
@@ -116,6 +128,7 @@ struct info *create_table(DIR *dir, int *size, char *path){
                 free(tmp);
             } 
         }
+
     }
 
     if (errno && !entry){
@@ -226,4 +239,35 @@ void free_memory(struct info *src, struct info *dest, int src_len, int dest_len)
 
     free(src);
     free(dest);
+}
+
+void destroy(struct info *target){
+    if ((target->stats.st_mode & S_IFMT) == S_IFREG){
+        if(remove(target->f_path)){
+            perror("remove");
+        }
+        return;
+    }
+    DIR *dir;
+    struct info *info;
+    int size, i;
+    
+    size = 0; 
+
+    dir = opendir(target->f_path);
+
+    info = create_table(dir, &size, target->f_path, true);
+
+    for (i = 0; i < size; i++){
+        destroy(&info[i]);
+        free(info[i].f_path);
+    }
+
+    free(info);
+
+    if(remove(target->f_path)){
+        perror("remove");
+    }
+
+    closedir(dir);
 }
