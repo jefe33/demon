@@ -15,7 +15,7 @@ void synchro_pliki(char *source, char *dest, bool flag);
 struct info *create_table(DIR *dir, int *size, char *path, bool flag);
 char *full_path(char *path, char* name);
 void copy_file(struct info *src, char *dst);
-void free_memory(struct info *src, struct info *dest, int src_len, int dest_len);
+void free_memory(struct info *target, int len);
 void destroy(struct info *target);
 
 struct info{
@@ -24,9 +24,9 @@ struct info{
     struct stat stats;
 };
 
-// int main(){
-//     synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest", true);
-// }
+int main(){
+    synchro_pliki("/opt/zadania/test/src", "/opt/zadania/test/dest", true);
+}
 
 void synchro_pliki(char *source, char *dest, bool flag){
     DIR *src_dir, *dest_dir;
@@ -88,7 +88,8 @@ void synchro_pliki(char *source, char *dest, bool flag){
         }
     }
 
-    free_memory(src_info, dest_info, src_size, dest_size);
+    free_memory(src_info, src_size);
+    free_memory(dest_info, dest_size);
     closedir(src_dir);
     closedir(dest_dir);
 }
@@ -226,28 +227,32 @@ void copy_file(struct info *src, char *dst){
     }
 }
 
-void free_memory(struct info *src, struct info *dest, int src_len, int dest_len){
-    int i;
-
-    for (i = 0; i < src_len; i++){
-        free(src[i].f_path);
+void free_memory(struct info *target, int len){
+    for (int i = 0; i < len; i++){
+        free(target[i].f_path);
     }
 
-    for (i = 0; i < dest_len; i++){
-        free(dest[i].f_path);
-    }
-
-    free(src);
-    free(dest);
+    free(target);
 }
 
 void destroy(struct info *target){
-    if ((target->stats.st_mode & S_IFMT) == S_IFREG){
-        if(remove(target->f_path)){
-            perror("remove");
-        }
+    /* proba usuniecia pliku/folderu jesli to nie pusty folder to 
+    *  errno zostanie ustawione na ENOTEMPTY i wykona sie dalszy kod
+    * jesli usuniecie sie powiedzie lub wystapi inny blad to fukcja sie konczy
+    */
+    int ret = remove(target->f_path); 
+
+    if(ret == 0){
+        return;
+    }else if (errno != ENOTEMPTY) { //jesli to blad inny niz nie pusty folder
+        perror("remove");
         return;
     }
+
+    /* jesli target to nie pusty folder to wykona sie kod ponizej
+    *  ktory tworze tablice elementow i wywoluje rekurencyjnie ta 
+    *  funkcje dla kazdego elementu a na koniec usuwa sam folder
+    */
     DIR *dir;
     struct info *info;
     int size, i;
@@ -256,16 +261,16 @@ void destroy(struct info *target){
 
     dir = opendir(target->f_path);
 
-    info = create_table(dir, &size, target->f_path, true);
+    info = create_table(dir, &size, target->f_path, true); 
 
     for (i = 0; i < size; i++){
-        destroy(&info[i]);
+        destroy(&info[i]);  // rekurencyjne wywolanie funckji dla kazdego elementu folderu
         free(info[i].f_path);
     }
 
     free(info);
 
-    if(remove(target->f_path)){
+    if(remove(target->f_path)){  // usuniecie juz pustego folderu
         perror("remove");
     }
 
