@@ -1,6 +1,21 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdbool.h>
+#include <fcntl.h>
+#include <utime.h>
+#include <sys/mman.h>
+#include <syslog.h>
+
 #ifndef SYNCHRO_H_   /* Include guard */
 #define SYNCHRO_H_
 
-void synchro_pliki(char *source, char *dest, bool flag);  
+int sync_folders(char *source, char *dest, bool flag, long int threshold);  
 
 #endif
+
