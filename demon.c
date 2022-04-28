@@ -7,8 +7,10 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <string.h>
+#include <signal.h>
 #include <stdbool.h>
-#include "synchro.h"
+#include <regex.h>
+#include "synchro.c"
 
 long int mmapMinSize = 1024 * 1024 * 10;
 char sourceP[50];
@@ -20,7 +22,7 @@ int sleepInt;
 
 void wakeywakey (){
     waken = true;
-    syslog(LOG_NOTICE("Demon wybudony recznie\n");
+    syslog(LOG_NOTICE,"Demon wybudony recznie\n");
 }
            
 void timetoDIE(){
@@ -44,9 +46,9 @@ if (arg < 3){
     stat(argc[1], &StSrc);
     stat(argc[2], &StDest);
     strcpy(sourceP,argc[2]);
-    strcpy(destP,argc[3])
+    strcpy(destP,argc[3]);
     
-    if (!(S_ISDIR(StSrc.st_mode)&& S_ISDIR(StDest))){
+    if (!(S_ISDIR(StSrc.st_mode)&& S_ISDIR(StDest.st_mode))){
         printf("Jedna z sciezek jest bledna");
         exit(-1);
     }
@@ -66,8 +68,8 @@ if (arg < 3){
                 }
                 else
                 {
-                    printf("Nie otrzymano liczby\n")
-                    exit(-1)
+                    printf("Nie otrzymano liczby\n");
+                    exit(-1);
                 }
             case 'm':
                 if(regexec(&regex,optarg,0, NULL,0))
@@ -82,7 +84,7 @@ if (arg < 3){
              case ':':
                 printf("Nie podano wartości parametru\n");
                 break;
-            case "?":
+            case '?':
                 printf("Nieznany\n");
                 break;
         }
@@ -125,15 +127,15 @@ if (arg < 3){
         
         syslog (LOG_NOTICE,"Demon uruchomiony");
         
-        signal(SIGUSR1,wakeywakey):
+        signal(SIGUSR1,wakeywakey);
         signal(SIGUSR2,timetoDIE);
 //kod demona
 
 while(1){
     //spanko
-        sleep(SleepInt);
+        sleep(sleepInt);
     //synchronizacja
-        sync_folder(sourceP,destP, recusive, mmapMinSize);
+        sync_folders(sourceP,destP, recursive, mmapMinSize);
     if(waken == true){
         syslog(LOG_NOTICE,"Wykonano reczna synchronizacje");
         waken = false;
@@ -143,6 +145,4 @@ while(1){
 
    }
 }
-
-
 
