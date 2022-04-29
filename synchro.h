@@ -11,6 +11,8 @@
 #include <utime.h>
 #include <sys/mman.h>
 #include <syslog.h>
+#include <signal.h>
+#include <regex.h>
 
 #ifndef SYNCHRO_H_   /* Include guard */
 #define SYNCHRO_H_

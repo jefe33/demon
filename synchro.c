@@ -13,7 +13,6 @@ int copy_file(struct info *src, char *dst, long int threshold);
 void free_memory(struct info *target, int len);
 int destroy(struct info *target);
 
-
 int sync_folders(char *source, char *dest, bool flag, long int threshold){
     DIR *src_dir, *dest_dir;
     struct info *src_info, *dest_info;
@@ -23,27 +22,30 @@ int sync_folders(char *source, char *dest, bool flag, long int threshold){
     
     src_size = dest_size = 0; 
     errno = 0;
+
     
     src_dir = opendir(source);
     if (src_dir == NULL){
-        perror("opendir src sp");
+        syslog(LOG_ERR, "opendir src sp: %s", strerror(errno));
         return -1;
     }
+    
     dest_dir = opendir(dest);
     if (dest_dir == NULL){
-        perror("opendir dest sp");
+        syslog(LOG_ERR, "opendir dest sp: %s", strerror(errno));
         if(closedir(src_dir) == -1){
-            perror("closedir src sp");
+            syslog(LOG_ERR, "closedir src sp: %s", strerror(errno));
         }
         return -1;
     }
+
     src_info = create_table(src_dir, &src_size, source, flag);
     if (src_info == NULL){
         if(closedir(src_dir) == -1){
-            perror("closedir src sp");
+            syslog(LOG_ERR, "closedir src sp: %s", strerror(errno));
         }
         if(closedir(dest_dir) == -1){
-            perror("closedir dest sp");
+            syslog(LOG_ERR, "closedir dest sp: %s", strerror(errno));
         }
         return  -1;
     }
@@ -51,13 +53,14 @@ int sync_folders(char *source, char *dest, bool flag, long int threshold){
     if (dest_info == NULL){
         free_memory(src_info, src_size);
         if(closedir(src_dir) == -1){
-            perror("closedir src sp");
+            syslog(LOG_ERR, "closedir src sp: %s", strerror(errno));
         }
         if(closedir(dest_dir) == -1){
-            perror("closedir dest sp");
+            syslog(LOG_ERR, "closedir dest sp: %s", strerror(errno));
         }
         return  -1;
     }
+    
     bool exists[dest_size];
 
     for (i = 0; i < dest_size; i++) {
@@ -89,7 +92,7 @@ int sync_folders(char *source, char *dest, bool flag, long int threshold){
                     continue;
                 }
                 if (mkdir(tmp, src_info[i].stats.st_mode) == -1){
-                    perror("mkdir");
+                    syslog(LOG_ERR, "mkdir: %s", strerror(errno));
                 }else{
                     syslog (LOG_NOTICE, "Utworzono folder %s", tmp);
                     sync_folders(src_info[i].f_path, tmp, flag, threshold);
@@ -109,10 +112,10 @@ int sync_folders(char *source, char *dest, bool flag, long int threshold){
     free_memory(src_info, src_size);
     free_memory(dest_info, dest_size);
     if(closedir(src_dir) == -1){
-        perror("closedir src sp");
+        syslog(LOG_ERR, "closedir src sp: %s", strerror(errno));
     }
     if(closedir(dest_dir) == -1){
-        perror("closedir dest sp");
+        syslog(LOG_ERR, "closedir dest sp: %s", strerror(errno));
     };
     return 0;
 }
@@ -126,7 +129,7 @@ struct info *create_table(DIR *dir, int *size, char *path, bool flag){
 
     infos = (struct info *) malloc(sizeof(struct info));
     if (infos == NULL){
-        perror("malloc ct");
+        syslog(LOG_ERR, "malloc ct: %s", strerror(errno));
         return NULL;
     }
     int upper_bound = 1;
@@ -143,7 +146,7 @@ struct info *create_table(DIR *dir, int *size, char *path, bool flag){
         ret = stat(name, &stats);
 
         if (ret) {
-            perror ("stat");
+            syslog(LOG_ERR, "stat: %s", strerror(errno));
             free(name);
         }else{
             if (S_ISREG(stats.st_mode) || (flag && S_ISDIR(stats.st_mode))) {
@@ -154,7 +157,7 @@ struct info *create_table(DIR *dir, int *size, char *path, bool flag){
                     if (tmp){
                         infos = tmp;
                     }else {
-                        perror("realloc");
+                        syslog(LOG_ERR, "realloc: %s", strerror(errno));
                         free(name);
                         continue;
                     }
@@ -173,7 +176,7 @@ struct info *create_table(DIR *dir, int *size, char *path, bool flag){
     }
 
     if (errno && !entry){
-        perror("readdir");
+        syslog(LOG_ERR, "readdir: %s", strerror(errno));
     }
 
     return infos;
@@ -187,7 +190,7 @@ char *full_path(char *path, char *name){
     name_len = strlen(name);
     tmp = (char *) malloc((path_len + name_len + 2) * sizeof(char));
     if (tmp == NULL){
-        perror("malloc fp");
+        syslog(LOG_ERR, "malloc fp: %s", strerror(errno));
         return NULL;
     }
     offset = 0;
@@ -219,7 +222,7 @@ int copy_file(struct info *src, char *dst, long int threshold){
     //otwarcie pliku z src
     fd_from = open(src->f_path, O_RDONLY);
     if (fd_from == -1){
-        perror("src open cf");
+        syslog(LOG_ERR, "src open cf: %s", strerror(errno));
         return -1;      
     }
 
@@ -232,20 +235,20 @@ int copy_file(struct info *src, char *dst, long int threshold){
     //utworzenie/wyczyszczenie pliku z dst
     fd_to = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, src->stats.st_mode);
     if (fd_to == -1){
-        perror("dest open cf");
+        syslog(LOG_ERR, "dest open cf: %s", strerror(errno));
         goto close_files;
     }
     // jesli rozmiar pliku jest wiekszy od progu to kopiowanie bedzie przrz mmap
     if(src->stats.st_size > threshold){
         char *mem = (char *) mmap(0, src->stats.st_size, PROT_READ, MAP_SHARED, fd_from, 0);
         if(mem == MAP_FAILED){
-            perror("mmap");
+            syslog(LOG_ERR, "mmap: %s", strerror(errno));
             goto close_files;
         }
 
         ssize_t nwritten = write(fd_to, mem, src->stats.st_size);
         if(nwritten < src->stats.st_size){
-            perror("write");
+            syslog(LOG_ERR, "write: %s", strerror(errno));
             goto close_files;
         }
 
@@ -268,7 +271,7 @@ int copy_file(struct info *src, char *dst, long int threshold){
                 }
                 else if (errno != EINTR)
                 {
-                    perror("write");
+                    syslog(LOG_ERR, "write: %s", strerror(errno));
                     goto close_files;
 
                 }
@@ -281,7 +284,7 @@ int copy_file(struct info *src, char *dst, long int threshold){
             new_times.actime = src->stats.st_atime;
             new_times.modtime = src->stats.st_mtime;
             if (utime(tmp, &new_times) < 0) {
-                perror(tmp);
+                syslog(LOG_ERR, "%s: %s", tmp, strerror(errno));
                 goto close_files;
             }
             syslog (LOG_NOTICE, "Skopiowano plik %s", src->f_path);
@@ -292,11 +295,11 @@ int copy_file(struct info *src, char *dst, long int threshold){
 
     close_files:
         if (close(fd_from) == -1){
-            perror("close src cf");
+            syslog(LOG_ERR, "close src cf: %s", strerror(errno));
         }
         if (fd_to >= 0){
             if(close(fd_to) == -1){
-                perror("close dest cf");
+                syslog(LOG_ERR, "close dest cf: %s", strerror(errno));
             }
         }
         if (tmp != NULL){
@@ -324,7 +327,7 @@ int destroy(struct info *target){
         syslog (LOG_NOTICE, "Usunieto %s", target->f_path);
         return 0;
     }else if (errno != ENOTEMPTY) { //jesli to blad inny niz nie pusty folder
-        perror("remove");
+        syslog(LOG_ERR, "remove: %s", strerror(errno));
         return -1;
     }
 
@@ -340,14 +343,14 @@ int destroy(struct info *target){
 
     dir = opendir(target->f_path);
     if (dir == NULL){
-        perror("opendir d");
+        syslog(LOG_ERR, "opendir d: %s", strerror(errno));
         return -1;
     }
 
     info = create_table(dir, &size, target->f_path, true); 
     if (info == NULL){
         if(closedir(dir) == -1){
-            perror("closedir d");
+            syslog(LOG_ERR, "closedir d: %s", strerror(errno));
         }
         return -1;
     }
@@ -359,11 +362,11 @@ int destroy(struct info *target){
     free(info);
 
     if(remove(target->f_path)){  // usuniecie juz pustego folderu
-        perror("remove");
+        syslog(LOG_ERR, "remove: %s", strerror(errno));
     }
 
     if(closedir(dir) == -1){
-        perror("closedir d");
+        syslog(LOG_ERR, "closedir d: %s", strerror(errno));
         return -1;
     }
     return 0;
