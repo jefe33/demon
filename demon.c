@@ -18,7 +18,7 @@ char destP[100];
 bool recursive = false;
 bool waken = false;
 regex_t regex;
-int sleepInt = 60;
+int sleepInt = 300;
 
 void wakeywakey (){
     waken = true;
