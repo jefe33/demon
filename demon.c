@@ -69,6 +69,7 @@ int main(int arg, char ** argc) {
                     printf("Nie otrzymano liczby snu\nProgram anulowany\n");
                     exit(EXIT_FAILURE);
                 }
+                break;
             case 'm':
                 if(regexec(&regex, optarg, 0, NULL, 0))
                 {
@@ -155,4 +156,3 @@ int main(int arg, char ** argc) {
         sleep(sleepInt);
     }
 }
-
