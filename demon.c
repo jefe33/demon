@@ -13,16 +13,16 @@
 #include "synchro.c"
 
 long int mmapMinSize = 1024 * 1024 * 10;
-char sourceP[50];
-char destP[50];
+char sourceP[100];
+char destP[100];
 bool recursive = false;
 bool waken = false;
 regex_t regex;
-int sleepInt;
+int sleepInt = 60;
 
 void wakeywakey (){
     waken = true;
-    syslog(LOG_NOTICE,"Demon wybudony recznie\n");
+    syslog(LOG_NOTICE,"Demon wybudzony recznie\n");
 }
            
 void timetoDIE(){
@@ -36,26 +36,38 @@ int main(int arg,char ** argc) {
 //check ilosc argumentow
 if (arg < 3){
 	printf("Zla ilosc arguementow\n");
-	printf("poprawny format to: sciezka zrodlowa , sciezka docelowa , flaga(opcjonalny), liczba (tak w przypadku flag s, m\n");
+	printf("poprawny format to: sciezka zrodlowa , sciezka docelowa , flaga(opcjonalny), liczba (tak w przypadku flag s, m\nProgram anulowany\n");
 	exit(-1);
 }
-
+//printf("check1\n");
 //check sciezki
 
     struct stat StSrc, StDest;
     stat(argc[1], &StSrc);
     stat(argc[2], &StDest);
-    strcpy(sourceP,argc[2]);
-    strcpy(destP,argc[3]);
+    //printf("check11\n");
+    strcpy(sourceP,argc[1]);
+    strcpy(destP,argc[2]);
     
+    //printf("check12\n");
     if (!(S_ISDIR(StSrc.st_mode)&& S_ISDIR(StDest.st_mode))){
-        printf("Jedna z sciezek jest bledna");
+        printf("Jedna z sciezek jest bledna\nProgram anulowany\n");
         exit(-1);
     }
 
+//printf("check2\n");
+//check regex
+
+int regexComp = regcomp(&regex, "^[0-9]*$",REG_EXTENDED);
+if(regexComp){
+printf ("Blad kompilacji regexa\nProgram anulowany\n");
+exit(-1);
+}
 //check getopt
 
+
     int opt;
+    opterr = 0;
     while((opt = getopt(arg,argc, "Rs:m:")) != -1){
         switch (opt){
             case 'R':
@@ -68,29 +80,32 @@ if (arg < 3){
                 }
                 else
                 {
-                    printf("Nie otrzymano liczby\n");
+                    printf("Nie otrzymano liczby snu\nProgram anulowany\n");
                     exit(-1);
                 }
+                break;
             case 'm':
-                if(regexec(&regex,optarg,0, NULL,0))
+                if(!regexec(&regex,optarg,0, NULL,0))
                 {
                     mmapMinSize = atoi(optarg);
                 }
                 else{
-                    printf("nie dostano poprawnej liczby mMapy\n");
+                    printf("Nie dostano poprawnej liczby mMapy\nProgram anulowany\n");
                     exit(-1);
                 }
                 break;
              case ':':
-                printf("Nie podano wartości parametru\n");
+                printf("Nie podano wartości parametru\nProgram anulowany\n");
+                exit(-1);
                 break;
             case '?':
-                printf("Nieznany\n");
+                printf("Podano nieznany argument: -%c\nProgram anulowany\n",optopt);
+                exit(-1);
                 break;
         }
     }
     
-                           
+//printf("check3\n");                     
 //zamiana w demona
 
 	pid_t pid,sid;
@@ -130,7 +145,7 @@ if (arg < 3){
         signal(SIGUSR1,wakeywakey);
         signal(SIGUSR2,timetoDIE);
 //kod demona
-
+//printf("check4\n");
 while(1){
     //spanko
         sleep(sleepInt);
@@ -145,4 +160,3 @@ while(1){
 
    }
 }
-
