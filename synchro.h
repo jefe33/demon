@@ -13,6 +13,7 @@
 #include <syslog.h>
 #include <signal.h>
 #include <regex.h>
+#include <linux/limits.h>
 
 #ifndef SYNCHRO_H_   /* Include guard */
 #define SYNCHRO_H_

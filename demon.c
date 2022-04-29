@@ -1,6 +1,8 @@
 #include "synchro.h"
 
 long int mmapMinSize = 1024 * 1024 * 10; // 10 MB
+char sourceP[PATH_MAX];
+char destP[PATH_MAX];
 bool recursive = false;
 bool waken = false;
 regex_t regex;
@@ -37,6 +39,8 @@ int main(int arg, char ** argc) {
         perror ("stat");
         exit(EXIT_FAILURE);
     }
+    strcpy(sourceP, argc[1]);
+    strcpy(destP, argc[2]);
     
     if (!(S_ISDIR(StSrc.st_mode) && S_ISDIR(StDest.st_mode))){
         printf("Jedna z sciezek jest bledna\nProgram anulowany\n");
@@ -45,7 +49,7 @@ int main(int arg, char ** argc) {
 
     //check regex
 
-    int regexComp = regcomp(&regex, "^[0-9]*$",REG_EXTENDED);
+    int regexComp = regcomp(&regex, "^[0-9]*$", REG_EXTENDED);
     if(regexComp){
         printf ("Blad kompilacji regexa\nProgram anulowany\n");
         exit(-1);
@@ -145,7 +149,7 @@ int main(int arg, char ** argc) {
     //kod demona
     while(1){
         //synchronizacja
-        sync_folders(argc[1], argc[2], recursive, mmapMinSize);
+        sync_folders(sourceP, destP, recursive, mmapMinSize);
         if(waken == true){
             syslog(LOG_NOTICE, "Wykonano reczna synchronizacje");
             waken = false;
