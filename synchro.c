@@ -184,11 +184,15 @@ struct info *create_table(DIR *dir, int *size, char *path, bool flag){
 
 char *full_path(char *path, char *name){
     char *tmp;
-    unsigned int path_len, name_len, i, offset;
+    int path_len, name_len, i, offset, slash;
 
+    slash = 1;
     path_len = strlen(path);
     name_len = strlen(name);
-    tmp = (char *) malloc((path_len + name_len + 2) * sizeof(char));
+    if (path[path_len - 1] == '/'){
+        slash = 0;
+    }
+    tmp = (char *) malloc((path_len + name_len + slash + 1) * sizeof(char));
     if (tmp == NULL){
         syslog(LOG_ERR, "malloc fp: %s", strerror(errno));
         return NULL;
@@ -198,8 +202,9 @@ char *full_path(char *path, char *name){
     for (i = 0; i < path_len; i++){
         tmp[offset++] = path[i];
     }
-
-    tmp[offset++] = '/';
+    if(slash){
+        tmp[offset++] = '/';
+    }
 
     for (i = 0; i < name_len; i++){
         tmp[offset++] = name[i];
@@ -251,7 +256,7 @@ int copy_file(struct info *src, char *dst, long int threshold){
             syslog(LOG_ERR, "write: %s", strerror(errno));
             goto close_files;
         }
-
+        munmap(mem, src->stats.st_size);
         ret = 0;
     }else {
         // odczytanie czesci(rozmiar bufora) pliku src a nastepnie zapisanie tej czesci do pliku dest az odczyta i zapisze caly plik
